@@ -22,7 +22,7 @@
       device-orientation-permission-ui="enabled: false"
     >
 
-      <!-- SCHRITT 2a: VIDEO ALS ASSET -->
+      <!-- VIDEO-ASSET -->
       <a-assets>
         <video
           id="overlayVideo"
@@ -35,14 +35,14 @@
         ></video>
       </a-assets>
 
-      <!-- Kamera -->
+      <!-- KAMERA -->
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <!-- SCHRITT 2b: Plane zeigt das VIDEO statt Bild -->
+      <!-- TARGET → VIDEO-PLANE -->
       <a-entity mindar-image-target="targetIndex: 0">
         <a-plane
           src="#overlayVideo"
-          position="1.5 0 0"
+          position="1.5 0 0" 
           width="4.0"
           height="2.4"
           rotation="0 0 0"
@@ -50,6 +50,39 @@
       </a-entity>
 
     </a-scene>
+
+    <!-- VIDEO-STEUERUNG (AUTOPLAY + TON) -->
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+
+        const video = document.querySelector("#overlayVideo");
+        const target = document.querySelector("a-entity[mindar-image-target]");
+
+        let audioUnlocked = false;
+
+        // 1) USER TAP → AUDIO FREISCHALTEN (iOS braucht das)
+        const unlockAudio = () => {
+          if (!audioUnlocked) {
+            video.muted = false;
+            video.play().catch(() => {});
+            audioUnlocked = true;
+            document.removeEventListener("click", unlockAudio);
+          }
+        };
+        document.addEventListener("click", unlockAudio);
+
+        // 2) TARGET FOUND → VIDEO STARTEN
+        target.addEventListener("targetFound", () => {
+          video.play().catch(() => {});
+        });
+
+        // 3) TARGET LOST → VIDEO PAUSIEREN
+        target.addEventListener("targetLost", () => {
+          video.pause();
+        });
+
+      });
+    </script>
 
   </body>
 </html>
