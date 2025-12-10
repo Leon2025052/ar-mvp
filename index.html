@@ -17,11 +17,12 @@
 
   <body>
     <a-scene
-      mindar-image="imageTargetSrc: ./targets.mind;"
+      mindar-image="imageTargetSrc: ./targets.mind?v=2;"
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false"
     >
-      <!-- Dein Overlay-Bild -->
+
+      <!-- Overlay-Bild als Asset laden -->
       <a-assets>
         <img id="overlay" src="./assets/overlay.png" />
       </a-assets>
@@ -31,7 +32,7 @@
 
       <!-- Dein Target (erstes Bild in targets.mind) -->
       <a-entity mindar-image-target="targetIndex: 0">
-        <!-- Overlay ca. 30 cm rechts neben dem Marker -->
+        <!-- Overlay ca. 30 cm rechts vom Marker -->
         <a-plane
           src="#overlay"
           position="0.3 0 0"
@@ -40,6 +41,7 @@
           rotation="0 0 0"
         ></a-plane>
       </a-entity>
+
     </a-scene>
   </body>
 </html>
