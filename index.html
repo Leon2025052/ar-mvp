@@ -22,27 +22,34 @@
       device-orientation-permission-ui="enabled: false"
     >
 
-      <!-- Overlay-Bild als Asset laden -->
+      <!-- SCHRITT 2a: VIDEO ALS ASSET -->
       <a-assets>
-        <img id="overlay" src="./assets/overlay.png" />
+        <video
+          id="overlayVideo"
+          src="./assets/overlay.mp4"
+          preload="auto"
+          loop="true"
+          autoplay="false"
+          playsinline
+          crossorigin="anonymous"
+        ></video>
       </a-assets>
 
       <!-- Kamera -->
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <!-- Dein Target (erstes Bild in targets.mind) -->
+      <!-- SCHRITT 2b: Plane zeigt das VIDEO statt Bild -->
       <a-entity mindar-image-target="targetIndex: 0">
-        <!-- Overlay ca. 30 cm rechts vom Marker -->
-
-          <a-plane
-            src="#overlay"
-            position="3.5 0 0"
-            width="4.0"
-            height="2.4"
-            rotation="0 0 0"
-          ></a-plane>
+        <a-plane
+          src="#overlayVideo"
+          position="1.5 0 0"
+          width="4.0"
+          height="2.4"
+          rotation="0 0 0"
+        ></a-plane>
       </a-entity>
 
     </a-scene>
+
   </body>
 </html>
