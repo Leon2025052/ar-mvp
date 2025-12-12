@@ -2,31 +2,64 @@
 <html lang="de">
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-    <!-- A-Frame + MindAR -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
     <style>
-      body {
-        margin: 0;
-        overflow: hidden;
+      body { margin: 0; overflow: hidden; }
+
+      #startOverlay{
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0,0,0,0.75);
+        z-index: 9999;
+        color: #fff;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      }
+      #startBtn{
+        font-size: 18px;
+        padding: 14px 18px;
+        border-radius: 10px;
+        border: 0;
+      }
+      #ver {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        z-index: 10000;
+        background: rgba(255,0,0,0.85);
+        color: #fff;
+        padding: 6px 8px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
       }
     </style>
   </head>
 
   <body>
+    <!-- Versions-Tag: damit du sofort siehst, dass der neue Stand geladen ist -->
+    <div id="ver">VERSION: START-BUTTON-ADD</div>
+
+    <!-- Start Overlay -->
+    <div id="startOverlay">
+      <button id="startBtn">Start AR</button>
+    </div>
+
     <a-scene
-      mindar-image="imageTargetSrc: ./targets.mind?v=2;"
+      id="scene"
+      mindar-image="imageTargetSrc: ./targets.mind?v=999; autoStart: false;"
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false"
     >
-
-      <!-- VIDEO ASSET -->
       <a-assets>
+        <!-- WICHTIG: Dateiname muss exakt existieren -->
         <video
           id="overlayVideo"
-          src="./assets/overlay.mp4"
+          src="./assets/overlay.mp4?v=999"
           preload="auto"
           loop
           autoplay="false"
@@ -35,113 +68,56 @@
         ></video>
       </a-assets>
 
-      <!-- KAMERA -->
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <!-- TARGET -->
       <a-entity mindar-image-target="targetIndex: 0">
         <a-plane
           position="1.2 0 0"
           width="0.84"
           height="1.5"
           rotation="0 0 0"
-          material="
-            shader: chroma-key;
-            src: #overlayVideo;
-            keyColor: #00ff00;
-            similarity: 0.25;
-            smoothness: 0.1;
-          "
+          material="shader: flat; src: #overlayVideo; transparent: true; blending: additive;"
         ></a-plane>
       </a-entity>
-
     </a-scene>
 
-    <!-- ========================= -->
-    <!-- VIDEO + AUDIO LOGIK -->
-    <!-- ========================= -->
     <script>
       document.addEventListener("DOMContentLoaded", () => {
+        const sceneEl = document.querySelector("#scene");
+        const mindar = sceneEl.systems["mindar-image-system"];
+        const overlay = document.querySelector("#startOverlay");
+        const startBtn = document.querySelector("#startBtn");
 
         const video = document.querySelector("#overlayVideo");
         const target = document.querySelector("a-entity[mindar-image-target]");
 
         let audioUnlocked = false;
 
-        // iOS: Audio per User-Tap freischalten
-        const unlockAudio = () => {
-          if (!audioUnlocked) {
-            video.muted = false;
-            video.play().catch(() => {});
-            audioUnlocked = true;
-            document.removeEventListener("click", unlockAudio);
-          }
-        };
-        document.addEventListener("click", unlockAudio);
+        startBtn.addEventListener("click", async () => {
+          try {
+            await mindar.start();           // Kamera erst nach User-Klick starten
+            overlay.style.display = "none";
 
-        // Target erkannt → Video starten
+            // iOS Audio-Freischaltung durch User-Klick
+            if (!audioUnlocked) {
+              video.muted = false;
+              video.play().catch(() => {});
+              audioUnlocked = true;
+            }
+          } catch (e) {
+            alert("Kamera-Start fehlgeschlagen. Prüfe Kamera-Berechtigung im Browser.");
+            console.error(e);
+          }
+        });
+
         target.addEventListener("targetFound", () => {
           video.play().catch(() => {});
         });
 
-        // Target verloren → Video pausieren
         target.addEventListener("targetLost", () => {
           video.pause();
         });
-
       });
     </script>
-
-    <!-- ========================= -->
-    <!-- CHROMA KEY SHADER -->
-    <!-- ========================= -->
-    <script>
-      AFRAME.registerShader("chroma-key", {
-        schema: {
-          src: { type: "map" },
-          keyColor: { type: "color", default: "#00ff00" },
-          similarity: { type: "number", default: 0.3 },
-          smoothness: { type: "number", default: 0.1 }
-        },
-
-        init: function (data) {
-          this.material = new THREE.ShaderMaterial({
-            uniforms: {
-              map: { value: data.src },
-              keyColor: { value: new THREE.Color(data.keyColor) },
-              similarity: { value: data.similarity },
-              smoothness: { value: data.smoothness }
-            },
-            transparent: true,
-            vertexShader: `
-              varying vec2 vUv;
-              void main() {
-                vUv = uv;
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-              }
-            `,
-            fragmentShader: `
-              uniform sampler2D map;
-              uniform vec3 keyColor;
-              uniform float similarity;
-              uniform float smoothness;
-              varying vec2 vUv;
-
-              void main() {
-                vec4 color = texture2D(map, vUv);
-                float dist = distance(color.rgb, keyColor);
-                float alpha = smoothstep(similarity, similarity + smoothness, dist);
-                gl_FragColor = vec4(color.rgb, alpha * color.a);
-              }
-            `
-          });
-        },
-
-        update: function () {
-          this.el.getObject3D("mesh").material = this.material;
-        }
-      });
-    </script>
-
   </body>
 </html>
