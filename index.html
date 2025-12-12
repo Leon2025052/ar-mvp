@@ -1,53 +1,123 @@
-<a-scene
-  mindar-image="imageTargetSrc: ./targets.mind?v=2;"
-  vr-mode-ui="enabled: false"
-  device-orientation-permission-ui="enabled: false"
-  renderer="alpha: true; antialias: true"
->
-  <a-assets>
-    <video
-      id="overlayVideo"
-      src="./assets/overlay.webm"
-      preload="auto"
-      loop
-      muted
-      playsinline
-      webkit-playsinline
-      crossorigin="anonymous"
-    ></video>
-  </a-assets>
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+    <!-- A-Frame + MindAR -->
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
-  <a-entity mindar-image-target="targetIndex: 0">
-    <a-plane
-      src="#overlayVideo"
-      material="shader: flat; transparent: true; alphaTest: 0.01; side: double"
-      position="0 0 0"
-      width="0.56"
-      height="1.0"
-      rotation="0 0 0"
-    ></a-plane>
-  </a-entity>
-</a-scene>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+    </style>
+  </head>
 
-<script>
-  document.addEventListener("DOMContentLoaded", () => {
-    const video = document.querySelector("#overlayVideo");
-    const target = document.querySelector("a-entity[mindar-image-target]");
+  <body>
+    <a-scene
+      mindar-image="imageTargetSrc: ./targets.mind?v=2;"
+      renderer="alpha: true; antialias: true"
+      vr-mode-ui="enabled: false"
+      device-orientation-permission-ui="enabled: false"
+    >
+      <!-- VIDEO-ASSET (MP4 MIT GRÜNEM HINTERGRUND) -->
+      <a-assets>
+        <video
+          id="overlayVideo"
+          src="./assets/overlay.mp4"
+          preload="auto"
+          loop
+          muted
+          playsinline
+          webkit-playsinline
+          crossorigin="anonymous"
+        ></video>
+      </a-assets>
 
-    // User-Geste: Ton freischalten (wenn du überhaupt Ton brauchst)
-    document.addEventListener("click", () => {
-      video.muted = false;
-      video.play().catch(() => {});
-    }, { once: true });
+      <!-- KAMERA -->
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-    target.addEventListener("targetFound", () => {
-      video.play().catch(() => {});
-    });
+      <!-- TARGET → VIDEO-PLANE (CHROMA KEY SHADER) -->
+      <a-entity mindar-image-target="targetIndex: 0">
+        <a-plane
+          position="0 0 0"
+          width="0.56"
+          height="1.0"
+          rotation="0 0 0"
+          material="
+            shader: chromakey;
+            src: #overlayVideo;
+            keyColor: 0.0 1.0 0.0;
+            threshold: 0.35;
+            smooth: 0.12;
+            side: double;
+          "
+        ></a-plane>
+      </a-entity>
+    </a-scene>
 
-    target.addEventListener("targetLost", () => {
-      video.pause();
-    });
-  });
-</script>
+    <script>
+      // Shader: entfernt Key-Farbe (Grün) live -> Alpha
+      AFRAME.registerShader("chromakey", {
+        schema: {
+          src: { type: "map" },
+          keyColor: { type: "vec3", default: { x: 0, y: 1, z: 0 } }, // Grün
+          threshold: { type: "number", default: 0.35 },              // höher = mehr wird wegkeyed
+          smooth: { type: "number", default: 0.12 },                  // weiche Kante
+        },
+        vertexShader: `
+          varying vec2 vUV;
+          void main() {
+            vUV = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform sampler2D src;
+          uniform vec3 keyColor;
+          uniform float threshold;
+          uniform float smooth;
+          varying vec2 vUV;
+
+          void main() {
+            vec4 c = texture2D(src, vUV);
+
+            // Abstand zur Key-Farbe
+            float d = distance(c.rgb, keyColor);
+
+            // Alpha: alles nahe am Grün wird transparent
+            float a = smoothstep(threshold, threshold + smooth, d);
+
+            gl_FragColor = vec4(c.rgb, a);
+          }
+        `,
+      });
+
+      document.addEventListener("DOMContentLoaded", () => {
+        const video = document.querySelector("#overlayVideo");
+        const target = document.querySelector("a-entity[mindar-image-target]");
+
+        // iOS/Browser: Video muss einmal durch User-Geste "freigeschaltet" werden
+        const unlock = () => {
+          video.play().catch(() => {});
+          document.removeEventListener("click", unlock);
+          document.removeEventListener("touchstart", unlock);
+        };
+        document.addEventListener("click", unlock, { passive: true });
+        document.addEventListener("touchstart", unlock, { passive: true });
+
+        // Target gefunden → Video abspielen
+        target.addEventListener("targetFound", () => {
+          video.play().catch(() => {});
+        });
+
+        // Target verloren → pausieren
+        target.addEventListener("targetLost", () => {
+          video.pause();
+        });
+      });
+    </script>
+  </body>
+</html>
