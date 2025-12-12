@@ -22,13 +22,13 @@
       device-orientation-permission-ui="enabled: false"
     >
 
-      <!-- VIDEO-ASSET -->
+      <!-- VIDEO ASSET -->
       <a-assets>
         <video
           id="overlayVideo"
           src="./assets/overlay.mp4"
           preload="auto"
-          loop="true"
+          loop
           autoplay="false"
           playsinline
           crossorigin="anonymous"
@@ -38,20 +38,28 @@
       <!-- KAMERA -->
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <!-- TARGET → VIDEO-PLANE -->
+      <!-- TARGET -->
       <a-entity mindar-image-target="targetIndex: 0">
         <a-plane
-          src="#overlayVideo"
-          position="1.5 0 0" 
-          width="4.0"
-          height="2.4"
+          position="1.2 0 0"
+          width="0.84"
+          height="1.5"
           rotation="0 0 0"
+          material="
+            shader: chroma-key;
+            src: #overlayVideo;
+            keyColor: #00ff00;
+            similarity: 0.25;
+            smoothness: 0.1;
+          "
         ></a-plane>
       </a-entity>
 
     </a-scene>
 
-    <!-- VIDEO-STEUERUNG (AUTOPLAY + TON) -->
+    <!-- ========================= -->
+    <!-- VIDEO + AUDIO LOGIK -->
+    <!-- ========================= -->
     <script>
       document.addEventListener("DOMContentLoaded", () => {
 
@@ -60,7 +68,7 @@
 
         let audioUnlocked = false;
 
-        // 1) USER TAP → AUDIO FREISCHALTEN (iOS braucht das)
+        // iOS: Audio per User-Tap freischalten
         const unlockAudio = () => {
           if (!audioUnlocked) {
             video.muted = false;
@@ -71,16 +79,67 @@
         };
         document.addEventListener("click", unlockAudio);
 
-        // 2) TARGET FOUND → VIDEO STARTEN
+        // Target erkannt → Video starten
         target.addEventListener("targetFound", () => {
           video.play().catch(() => {});
         });
 
-        // 3) TARGET LOST → VIDEO PAUSIEREN
+        // Target verloren → Video pausieren
         target.addEventListener("targetLost", () => {
           video.pause();
         });
 
+      });
+    </script>
+
+    <!-- ========================= -->
+    <!-- CHROMA KEY SHADER -->
+    <!-- ========================= -->
+    <script>
+      AFRAME.registerShader("chroma-key", {
+        schema: {
+          src: { type: "map" },
+          keyColor: { type: "color", default: "#00ff00" },
+          similarity: { type: "number", default: 0.3 },
+          smoothness: { type: "number", default: 0.1 }
+        },
+
+        init: function (data) {
+          this.material = new THREE.ShaderMaterial({
+            uniforms: {
+              map: { value: data.src },
+              keyColor: { value: new THREE.Color(data.keyColor) },
+              similarity: { value: data.similarity },
+              smoothness: { value: data.smoothness }
+            },
+            transparent: true,
+            vertexShader: `
+              varying vec2 vUv;
+              void main() {
+                vUv = uv;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+              }
+            `,
+            fragmentShader: `
+              uniform sampler2D map;
+              uniform vec3 keyColor;
+              uniform float similarity;
+              uniform float smoothness;
+              varying vec2 vUv;
+
+              void main() {
+                vec4 color = texture2D(map, vUv);
+                float dist = distance(color.rgb, keyColor);
+                float alpha = smoothstep(similarity, similarity + smoothness, dist);
+                gl_FragColor = vec4(color.rgb, alpha * color.a);
+              }
+            `
+          });
+        },
+
+        update: function () {
+          this.el.getObject3D("mesh").material = this.material;
+        }
       });
     </script>
 
