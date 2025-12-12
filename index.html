@@ -2,79 +2,117 @@
 <html lang="de">
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- A-Frame + MindAR -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
     <style>
-      body { margin: 0; overflow: hidden; }
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
     </style>
   </head>
 
   <body>
     <a-scene
       mindar-image="imageTargetSrc: ./targets.mind?v=2;"
-      renderer="alpha: true; antialias: true"
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false"
     >
+
+      <!-- VIDEO ASSET -->
       <a-assets>
         <video
           id="overlayVideo"
           src="./assets/overlay.mp4"
           preload="auto"
           loop
-          muted
+          autoplay="false"
           playsinline
-          webkit-playsinline
           crossorigin="anonymous"
         ></video>
       </a-assets>
 
+      <!-- KAMERA -->
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
+      <!-- TARGET -->
       <a-entity mindar-image-target="targetIndex: 0">
         <a-plane
-          id="videoPlane"
-          position="0 0 0"
-          width="0.56"
-          height="1.0"
-          material="shader: flat; side: double; transparent: true;"
-          chromakey-video="videoId: overlayVideo; keyColor: 0.0 1.0 0.0; threshold: 0.35; smooth: 0.12"
+          position="1.2 0 0"
+          width="0.84"
+          height="1.5"
+          rotation="0 0 0"
+          material="
+            shader: chroma-key;
+            src: #overlayVideo;
+            keyColor: #00ff00;
+            similarity: 0.25;
+            smoothness: 0.1;
+          "
         ></a-plane>
       </a-entity>
+
     </a-scene>
 
+    <!-- ========================= -->
+    <!-- VIDEO + AUDIO LOGIK -->
+    <!-- ========================= -->
     <script>
-      // Component: bindet ein HTMLVideoElement als THREE.VideoTexture + ChromaKey-ShaderMaterial
-      AFRAME.registerComponent("chromakey-video", {
+      document.addEventListener("DOMContentLoaded", () => {
+
+        const video = document.querySelector("#overlayVideo");
+        const target = document.querySelector("a-entity[mindar-image-target]");
+
+        let audioUnlocked = false;
+
+        // iOS: Audio per User-Tap freischalten
+        const unlockAudio = () => {
+          if (!audioUnlocked) {
+            video.muted = false;
+            video.play().catch(() => {});
+            audioUnlocked = true;
+            document.removeEventListener("click", unlockAudio);
+          }
+        };
+        document.addEventListener("click", unlockAudio);
+
+        // Target erkannt → Video starten
+        target.addEventListener("targetFound", () => {
+          video.play().catch(() => {});
+        });
+
+        // Target verloren → Video pausieren
+        target.addEventListener("targetLost", () => {
+          video.pause();
+        });
+
+      });
+    </script>
+
+    <!-- ========================= -->
+    <!-- CHROMA KEY SHADER -->
+    <!-- ========================= -->
+    <script>
+      AFRAME.registerShader("chroma-key", {
         schema: {
-          videoId: { type: "string" },
-          keyColor: { type: "vec3", default: { x: 0, y: 1, z: 0 } },
-          threshold: { type: "number", default: 0.35 },
-          smooth: { type: "number", default: 0.12 },
+          src: { type: "map" },
+          keyColor: { type: "color", default: "#00ff00" },
+          similarity: { type: "number", default: 0.3 },
+          smoothness: { type: "number", default: 0.1 }
         },
 
-        init: function () {
-          const data = this.data;
-          this.video = document.getElementById(data.videoId);
-          if (!this.video) {
-            console.error("chromakey-video: video element not found:", data.videoId);
-            return;
-          }
-
-          // VideoTexture
-          this.videoTexture = new THREE.VideoTexture(this.video);
-          this.videoTexture.minFilter = THREE.LinearFilter;
-          this.videoTexture.magFilter = THREE.LinearFilter;
-          this.videoTexture.format = THREE.RGBAFormat;
-
-          // ShaderMaterial
+        init: function (data) {
           this.material = new THREE.ShaderMaterial({
             uniforms: {
-              map: { value: this.videoTexture },
-              keyColor: { value: new THREE.Vector3(data.keyColor.x, data.keyColor.y, data.keyColor.z) },
-              threshold: { value: data.threshold },
-              smooth: { value: data.smooth },
+              map: { value: data.src },
+              keyColor: { value: new THREE.Color(data.keyColor) },
+              similarity: { value: data.similarity },
+              smoothness: { value: data.smoothness }
             },
+            transparent: true,
             vertexShader: `
               varying vec2 vUv;
               void main() {
@@ -85,71 +123,25 @@
             fragmentShader: `
               uniform sampler2D map;
               uniform vec3 keyColor;
-              uniform float threshold;
-              uniform float smooth;
+              uniform float similarity;
+              uniform float smoothness;
               varying vec2 vUv;
 
               void main() {
-                vec4 c = texture2D(map, vUv);
-                float d = distance(c.rgb, keyColor);
-                float a = smoothstep(threshold, threshold + smooth, d);
-                gl_FragColor = vec4(c.rgb, a);
+                vec4 color = texture2D(map, vUv);
+                float dist = distance(color.rgb, keyColor);
+                float alpha = smoothstep(similarity, similarity + smoothness, dist);
+                gl_FragColor = vec4(color.rgb, alpha * color.a);
               }
-            `,
-            transparent: true,
-            depthWrite: false,
-            side: THREE.DoubleSide,
-          });
-
-          // Warten bis Mesh da ist, dann Material setzen
-          this.el.addEventListener("loaded", () => {
-            const mesh = this.el.getObject3D("mesh");
-            if (!mesh) return;
-
-            mesh.traverse((o) => {
-              if (o.isMesh) o.material = this.material;
-            });
+            `
           });
         },
 
         update: function () {
-          if (!this.material) return;
-          const d = this.data;
-          this.material.uniforms.keyColor.value.set(d.keyColor.x, d.keyColor.y, d.keyColor.z);
-          this.material.uniforms.threshold.value = d.threshold;
-          this.material.uniforms.smooth.value = d.smooth;
-        },
-      });
-
-      document.addEventListener("DOMContentLoaded", () => {
-        const video = document.querySelector("#overlayVideo");
-        const target = document.querySelector("a-entity[mindar-image-target]");
-
-        // iOS/Android: erst nach User-Geste starten
-        const unlock = async () => {
-          try {
-            video.muted = true; // Autoplay-sicher
-            await video.play();
-          } catch (e) {}
-          document.removeEventListener("click", unlock);
-          document.removeEventListener("touchstart", unlock);
-        };
-        document.addEventListener("click", unlock, { passive: true });
-        document.addEventListener("touchstart", unlock, { passive: true });
-
-        target.addEventListener("targetFound", async () => {
-          try {
-            if (video.readyState < 2) {
-              await new Promise((res) => video.addEventListener("canplay", res, { once: true }));
-            }
-            await video.play();
-          } catch (e) {}
-        });
-
-        target.addEventListener("targetLost", () => {
-          video.pause();
-        });
+          this.el.getObject3D("mesh").material = this.material;
+        }
       });
     </script>
+
   </body>
 </html>
