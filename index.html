@@ -21,14 +21,13 @@
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false"
     >
-
-      <!-- VIDEO-ASSET -->
+      <!-- VIDEO-ASSET (WEBM) -->
       <a-assets>
         <video
           id="overlayVideo"
-          src="./assets/overlay.mp4"
+          src="./assets/overlay.webm"
           preload="auto"
-          loop="true"
+          loop
           autoplay="false"
           playsinline
           crossorigin="anonymous"
@@ -42,25 +41,23 @@
       <a-entity mindar-image-target="targetIndex: 0">
         <a-plane
           src="#overlayVideo"
-          position="1.0 0 0" 
+          position="1.0 0 0"
           width="0.56"
           height="1.0"
           rotation="0 0 0"
         ></a-plane>
       </a-entity>
-
     </a-scene>
 
-    <!-- VIDEO-STEUERUNG (AUTOPLAY + TON) -->
+    <!-- VIDEO-STEUERUNG (AUTOPLAY + TON-UNLOCK für iOS) -->
     <script>
       document.addEventListener("DOMContentLoaded", () => {
-
         const video = document.querySelector("#overlayVideo");
         const target = document.querySelector("a-entity[mindar-image-target]");
 
         let audioUnlocked = false;
 
-        // 1) USER TAP → AUDIO FREISCHALTEN (iOS braucht das)
+        // iOS: Ton benötigt User-Geste (nur relevant, wenn dein WebM Audio hat)
         const unlockAudio = () => {
           if (!audioUnlocked) {
             video.muted = false;
@@ -71,18 +68,16 @@
         };
         document.addEventListener("click", unlockAudio);
 
-        // 2) TARGET FOUND → VIDEO STARTEN
+        // Target gefunden → Video abspielen
         target.addEventListener("targetFound", () => {
           video.play().catch(() => {});
         });
 
-        // 3) TARGET LOST → VIDEO PAUSIEREN
+        // Target verloren → pausieren
         target.addEventListener("targetLost", () => {
           video.pause();
         });
-
       });
     </script>
-
   </body>
 </html>
