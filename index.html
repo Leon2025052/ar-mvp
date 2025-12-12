@@ -2,27 +2,19 @@
 <html lang="de">
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-    <!-- A-Frame + MindAR -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-
     <style>
-      body {
-        margin: 0;
-        overflow: hidden;
-      }
+      body { margin: 0; overflow: hidden; }
     </style>
   </head>
 
   <body>
     <a-scene
-      mindar-image="imageTargetSrc: ./targets.mind?v=2;"
+      mindar-image="imageTargetSrc: ./targets.mind?v=3;"
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false"
     >
-
-      <!-- VIDEO ASSET -->
       <a-assets>
         <video
           id="overlayVideo"
@@ -35,40 +27,25 @@
         ></video>
       </a-assets>
 
-      <!-- KAMERA -->
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <!-- TARGET -->
       <a-entity mindar-image-target="targetIndex: 0">
         <a-plane
+          src="#overlayVideo"
           position="1.2 0 0"
           width="0.84"
           height="1.5"
           rotation="0 0 0"
-          material="
-            shader: chroma-key;
-            src: #overlayVideo;
-            keyColor: #00ff00;
-            similarity: 0.25;
-            smoothness: 0.1;
-          "
         ></a-plane>
       </a-entity>
-
     </a-scene>
 
-    <!-- ========================= -->
-    <!-- VIDEO + AUDIO LOGIK -->
-    <!-- ========================= -->
     <script>
       document.addEventListener("DOMContentLoaded", () => {
-
         const video = document.querySelector("#overlayVideo");
         const target = document.querySelector("a-entity[mindar-image-target]");
-
         let audioUnlocked = false;
 
-        // iOS: Audio per User-Tap freischalten
         const unlockAudio = () => {
           if (!audioUnlocked) {
             video.muted = false;
@@ -79,69 +56,9 @@
         };
         document.addEventListener("click", unlockAudio);
 
-        // Target erkannt → Video starten
-        target.addEventListener("targetFound", () => {
-          video.play().catch(() => {});
-        });
-
-        // Target verloren → Video pausieren
-        target.addEventListener("targetLost", () => {
-          video.pause();
-        });
-
+        target.addEventListener("targetFound", () => video.play().catch(() => {}));
+        target.addEventListener("targetLost", () => video.pause());
       });
     </script>
-
-    <!-- ========================= -->
-    <!-- CHROMA KEY SHADER -->
-    <!-- ========================= -->
-    <script>
-      AFRAME.registerShader("chroma-key", {
-        schema: {
-          src: { type: "map" },
-          keyColor: { type: "color", default: "#00ff00" },
-          similarity: { type: "number", default: 0.3 },
-          smoothness: { type: "number", default: 0.1 }
-        },
-
-        init: function (data) {
-          this.material = new THREE.ShaderMaterial({
-            uniforms: {
-              map: { value: data.src },
-              keyColor: { value: new THREE.Color(data.keyColor) },
-              similarity: { value: data.similarity },
-              smoothness: { value: data.smoothness }
-            },
-            transparent: true,
-            vertexShader: `
-              varying vec2 vUv;
-              void main() {
-                vUv = uv;
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-              }
-            `,
-            fragmentShader: `
-              uniform sampler2D map;
-              uniform vec3 keyColor;
-              uniform float similarity;
-              uniform float smoothness;
-              varying vec2 vUv;
-
-              void main() {
-                vec4 color = texture2D(map, vUv);
-                float dist = distance(color.rgb, keyColor);
-                float alpha = smoothstep(similarity, similarity + smoothness, dist);
-                gl_FragColor = vec4(color.rgb, alpha * color.a);
-              }
-            `
-          });
-        },
-
-        update: function () {
-          this.el.getObject3D("mesh").material = this.material;
-        }
-      });
-    </script>
-
   </body>
 </html>
