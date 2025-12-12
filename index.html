@@ -1,83 +1,53 @@
-<!DOCTYPE html>
-<html lang="de">
-  <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+<a-scene
+  mindar-image="imageTargetSrc: ./targets.mind?v=2;"
+  vr-mode-ui="enabled: false"
+  device-orientation-permission-ui="enabled: false"
+  renderer="alpha: true; antialias: true"
+>
+  <a-assets>
+    <video
+      id="overlayVideo"
+      src="./assets/overlay.webm"
+      preload="auto"
+      loop
+      muted
+      playsinline
+      webkit-playsinline
+      crossorigin="anonymous"
+    ></video>
+  </a-assets>
 
-    <!-- A-Frame + MindAR -->
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+  <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-    <style>
-      body {
-        margin: 0;
-        overflow: hidden;
-      }
-    </style>
-  </head>
+  <a-entity mindar-image-target="targetIndex: 0">
+    <a-plane
+      src="#overlayVideo"
+      material="shader: flat; transparent: true; alphaTest: 0.01; side: double"
+      position="0 0 0"
+      width="0.56"
+      height="1.0"
+      rotation="0 0 0"
+    ></a-plane>
+  </a-entity>
+</a-scene>
 
-  <body>
-    <a-scene
-      mindar-image="imageTargetSrc: ./targets.mind?v=2;"
-      vr-mode-ui="enabled: false"
-      device-orientation-permission-ui="enabled: false"
-    >
-      <!-- VIDEO-ASSET (WEBM) -->
-      <a-assets>
-        <video
-          id="overlayVideo"
-          src="./assets/overlay.webm"
-          preload="auto"
-          loop
-          autoplay="false"
-          playsinline
-          crossorigin="anonymous"
-        ></video>
-      </a-assets>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const video = document.querySelector("#overlayVideo");
+    const target = document.querySelector("a-entity[mindar-image-target]");
 
-      <!-- KAMERA -->
-      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+    // User-Geste: Ton freischalten (wenn du überhaupt Ton brauchst)
+    document.addEventListener("click", () => {
+      video.muted = false;
+      video.play().catch(() => {});
+    }, { once: true });
 
-      <!-- TARGET → VIDEO-PLANE -->
-      <a-entity mindar-image-target="targetIndex: 0">
-        <a-plane
-          src="#overlayVideo"
-          position="1.0 0 0"
-          width="0.56"
-          height="1.0"
-          rotation="0 0 0"
-        ></a-plane>
-      </a-entity>
-    </a-scene>
+    target.addEventListener("targetFound", () => {
+      video.play().catch(() => {});
+    });
 
-    <!-- VIDEO-STEUERUNG (AUTOPLAY + TON-UNLOCK für iOS) -->
-    <script>
-      document.addEventListener("DOMContentLoaded", () => {
-        const video = document.querySelector("#overlayVideo");
-        const target = document.querySelector("a-entity[mindar-image-target]");
-
-        let audioUnlocked = false;
-
-        // iOS: Ton benötigt User-Geste (nur relevant, wenn dein WebM Audio hat)
-        const unlockAudio = () => {
-          if (!audioUnlocked) {
-            video.muted = false;
-            video.play().catch(() => {});
-            audioUnlocked = true;
-            document.removeEventListener("click", unlockAudio);
-          }
-        };
-        document.addEventListener("click", unlockAudio);
-
-        // Target gefunden → Video abspielen
-        target.addEventListener("targetFound", () => {
-          video.play().catch(() => {});
-        });
-
-        // Target verloren → pausieren
-        target.addEventListener("targetLost", () => {
-          video.pause();
-        });
-      });
-    </script>
-  </body>
-</html>
+    target.addEventListener("targetLost", () => {
+      video.pause();
+    });
+  });
+</script>
