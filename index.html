@@ -128,7 +128,10 @@
             }
 
           } catch (e) {
-            alert("Kamera-Zugriff fehlgeschlagen. Bitte im Browser zulassen.");
+
+            const name = e && e.name ? e.name : "UnknownError";
+            const msg  = e && e.message ? e.message : "";
+            alert("Kamera-Fehler: " + name + (msg ? ("\n" + msg) : ""));
             console.error(e);
           }
         });
