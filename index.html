@@ -2,13 +2,19 @@
 <html lang="de">
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- A-Frame + MindAR -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
     <style>
-      body { margin: 0; overflow: hidden; }
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
 
-      #startOverlay{
+      /* Start-Overlay */
+      #startOverlay {
         position: fixed;
         inset: 0;
         display: flex;
@@ -16,15 +22,16 @@
         justify-content: center;
         background: rgba(0,0,0,0.75);
         z-index: 9999;
-        color: #fff;
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
       }
-      #startBtn{
+
+      #startBtn {
         font-size: 18px;
-        padding: 14px 18px;
+        padding: 14px 20px;
         border-radius: 10px;
-        border: 0;
+        border: none;
       }
+
+      /* Versions-Hinweis */
       #ver {
         position: fixed;
         top: 10px;
@@ -41,25 +48,26 @@
   </head>
 
   <body>
-    <!-- Versions-Tag: damit du sofort siehst, dass der neue Stand geladen ist -->
-    <div id="ver">VERSION: START-BUTTON-ADD</div>
+    <!-- Versions-Tag -->
+    <div id="ver">VERSION: CAMERA-WARMUP</div>
 
-    <!-- Start Overlay -->
+    <!-- Start-Button -->
     <div id="startOverlay">
       <button id="startBtn">Start AR</button>
     </div>
 
     <a-scene
       id="scene"
-      mindar-image="imageTargetSrc: ./targets.mind?v=999; autoStart: false;"
+      mindar-image="imageTargetSrc: ./targets.mind?v=1000; autoStart: false;"
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false"
     >
+
+      <!-- Video Asset -->
       <a-assets>
-        <!-- WICHTIG: Dateiname muss exakt existieren -->
         <video
           id="overlayVideo"
-          src="./assets/overlay.mp4?v=999"
+          src="./assets/overlay.mp4?v=1000"
           preload="auto"
           loop
           autoplay="false"
@@ -68,25 +76,34 @@
         ></video>
       </a-assets>
 
+      <!-- Kamera -->
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
+      <!-- Target + Video -->
       <a-entity mindar-image-target="targetIndex: 0">
         <a-plane
           position="1.2 0 0"
           width="0.84"
           height="1.5"
           rotation="0 0 0"
-          material="shader: flat; src: #overlayVideo; transparent: true; blending: additive;"
+          material="
+            shader: flat;
+            src: #overlayVideo;
+            transparent: true;
+            blending: additive;
+          "
         ></a-plane>
       </a-entity>
+
     </a-scene>
 
+    <!-- Logik -->
     <script>
       document.addEventListener("DOMContentLoaded", () => {
         const sceneEl = document.querySelector("#scene");
         const mindar = sceneEl.systems["mindar-image-system"];
-        const overlay = document.querySelector("#startOverlay");
         const startBtn = document.querySelector("#startBtn");
+        const overlay = document.querySelector("#startOverlay");
 
         const video = document.querySelector("#overlayVideo");
         const target = document.querySelector("a-entity[mindar-image-target]");
@@ -95,21 +112,28 @@
 
         startBtn.addEventListener("click", async () => {
           try {
-            await mindar.start();           // Kamera erst nach User-Klick starten
+            // 1) Kamera-Warmup → triggert Permission zuverlässig
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            stream.getTracks().forEach(t => t.stop());
+
+            // 2) MindAR starten
+            await mindar.start();
             overlay.style.display = "none";
 
-            // iOS Audio-Freischaltung durch User-Klick
+            // 3) iOS Audio freischalten
             if (!audioUnlocked) {
               video.muted = false;
               video.play().catch(() => {});
               audioUnlocked = true;
             }
+
           } catch (e) {
-            alert("Kamera-Start fehlgeschlagen. Prüfe Kamera-Berechtigung im Browser.");
+            alert("Kamera-Zugriff fehlgeschlagen. Bitte im Browser zulassen.");
             console.error(e);
           }
         });
 
+        // Target Events
         target.addEventListener("targetFound", () => {
           video.play().catch(() => {});
         });
@@ -119,5 +143,6 @@
         });
       });
     </script>
+
   </body>
 </html>
