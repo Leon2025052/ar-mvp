@@ -8,132 +8,119 @@
 
     <style>
       body { margin: 0; overflow: hidden; }
-
-      #startOverlay{
+      #resetBtn {
         position: fixed;
-        inset: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: rgba(0,0,0,0.75);
+        left: 12px;
+        bottom: 12px;
         z-index: 9999;
-      }
-      #startBtn{
-        font-size: 18px;
-        padding: 14px 20px;
+        padding: 12px 14px;
+        font-size: 16px;
         border-radius: 10px;
-        border: none;
-      }
-      #ver{
-        position: fixed;
-        top: 10px;
-        left: 10px;
-        z-index: 10000;
-        background: rgba(255,0,0,0.85);
-        color: #fff;
-        padding: 6px 8px;
-        border-radius: 6px;
-        font-size: 12px;
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        border: 0;
       }
     </style>
   </head>
 
   <body>
-    <div id="ver">VERSION: MINDAR-LOADED-FIX</div>
-
-    <div id="startOverlay">
-      <button id="startBtn">Start AR</button>
-    </div>
+    <button id="resetBtn">Reset / neues Target</button>
 
     <a-scene
-      id="scene"
-      mindar-image="imageTargetSrc: ./targets.mind?v=2000; autoStart: false;"
+      mindar-image="imageTargetSrc: ./targets.mind?v=4;"
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false"
     >
       <a-assets>
         <video
           id="overlayVideo"
-          src="./assets/overlay.mp4?v=2000"
+          src="./assets/overlay.mp4"
           preload="auto"
-          loop
+          loop="true"
           autoplay="false"
           playsinline
           crossorigin="anonymous"
         ></video>
       </a-assets>
 
-      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+      <a-camera position="0 0 0" look-controls="enabled: true"></a-camera>
 
-      <a-entity id="target" mindar-image-target="targetIndex: 0">
+      <!-- 1) Target-Entity: nur zum Erkennen/Triggern -->
+      <a-entity id="targetAnchor" mindar-image-target="targetIndex: 0"></a-entity>
+
+      <!-- 2) Overlay-Holder: NICHT an Target gebunden -> "eingefroren" im Raum -->
+      <a-entity id="overlayHolder" visible="false">
         <a-plane
-          position="1.2 0 0"
+          id="videoPlane"
+          src="#overlayVideo"
+          position="1.5 0 0"
           width="0.84"
           height="1.5"
           rotation="0 0 0"
-          material="shader: flat; src: #overlayVideo; transparent: true; blending: additive;"
         ></a-plane>
       </a-entity>
     </a-scene>
 
     <script>
       document.addEventListener("DOMContentLoaded", () => {
-        const sceneEl = document.querySelector("#scene");
-        const startBtn = document.querySelector("#startBtn");
-        const overlay = document.querySelector("#startOverlay");
+        const scene = document.querySelector("a-scene");
         const video = document.querySelector("#overlayVideo");
-        const target = document.querySelector("#target");
+        const targetAnchor = document.querySelector("#targetAnchor");
+        const overlayHolder = document.querySelector("#overlayHolder");
+        const resetBtn = document.querySelector("#resetBtn");
 
+        let frozen = false;
         let audioUnlocked = false;
-        let sceneReady = false;
 
-        // WICHTIG: erst wenn die Szene fertig ist, gibt es systems["mindar-image-system"]
-        sceneEl.addEventListener("loaded", () => {
-          sceneReady = true;
-        });
-
-        startBtn.addEventListener("click", async () => {
-          try {
-            if (!sceneReady) {
-              alert("AR lädt noch… bitte 1–2 Sekunden warten und nochmal klicken.");
-              return;
-            }
-
-            // Kamera-Warmup (triggert Permission sauber)
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            stream.getTracks().forEach(t => t.stop());
-
-            // MindAR-System JETZT holen (nicht vorher cachen!)
-            const mindar = sceneEl.systems["mindar-image-system"];
-            if (!mindar || typeof mindar.start !== "function") {
-              throw new Error("MindAR-System nicht bereit (mindar-image-system fehlt).");
-            }
-
-            await mindar.start();
-            overlay.style.display = "none";
-
-            // iOS Audio freischalten per Click
-            if (!audioUnlocked) {
-              video.muted = false;
-              video.play().catch(() => {});
-              audioUnlocked = true;
-            }
-
-          } catch (e) {
-            const name = e && e.name ? e.name : "Error";
-            const msg  = e && e.message ? e.message : String(e);
-            alert("Start fehlgeschlagen: " + name + "\n" + msg);
-            console.error(e);
+        // iOS: Audio erst nach User-Interaktion
+        const unlockAudio = () => {
+          if (!audioUnlocked) {
+            video.muted = false;
+            video.play().catch(() => {});
+            audioUnlocked = true;
+            document.removeEventListener("click", unlockAudio);
           }
-        });
+        };
+        document.addEventListener("click", unlockAudio);
 
-        // Video steuern
-        target.addEventListener("targetFound", () => {
+        // Helper: Weltpose vom targetAnchor in overlayHolder kopieren
+        const freezeOverlayToTargetPose = () => {
+          // Stelle sicher, dass three.js Objekte existieren
+          const tObj = targetAnchor.object3D;
+          const oObj = overlayHolder.object3D;
+
+          // World Transform holen
+          tObj.updateMatrixWorld(true);
+
+          // MatrixWorld kopieren -> Overlay sitzt genau dort, wo Target gerade war
+          oObj.matrix.copy(tObj.matrixWorld);
+          oObj.matrix.decompose(oObj.position, oObj.quaternion, oObj.scale);
+
+          // A-Frame nutzt eigene Matrixberechnung
+          oObj.matrixAutoUpdate = true;
+        };
+
+        // Target erkannt -> Overlay "einfrieren" und Video starten
+        targetAnchor.addEventListener("targetFound", () => {
+          if (!frozen) {
+            freezeOverlayToTargetPose();
+            overlayHolder.setAttribute("visible", "true");
+            frozen = true;
+          }
+          // Video läuft weiter, auch wenn Target später weg ist
           video.play().catch(() => {});
         });
-        target.addEventListener("targetLost", () => {
+
+        // Target verloren -> IGNORIEREN (damit es weiterläuft)
+        targetAnchor.addEventListener("targetLost", () => {
+          // absichtlich leer
+        });
+
+        // Reset -> alles zurücksetzen, neu scannen möglich
+        resetBtn.addEventListener("click", () => {
           video.pause();
+          video.currentTime = 0;
+
+          overlayHolder.setAttribute("visible", "false");
+          frozen = false;
         });
       });
     </script>
