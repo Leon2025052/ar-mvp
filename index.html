@@ -40,7 +40,7 @@
   </head>
 
   <body>
-    <div id="ver">VERSION: MINDAR-LOADED-FIX</div>
+    <div id="ver">VERSION: TARGET-RESUME-PLAY</div>
 
     <div id="startOverlay">
       <button id="startBtn">Start AR</button>
@@ -87,8 +87,9 @@
 
         let audioUnlocked = false;
         let sceneReady = false;
+        let hasTarget = false;
 
-        // WICHTIG: erst wenn die Szene fertig ist, gibt es systems["mindar-image-system"]
+        // Szene bereit?
         sceneEl.addEventListener("loaded", () => {
           sceneReady = true;
         });
@@ -100,39 +101,48 @@
               return;
             }
 
-            // Kamera-Warmup (triggert Permission sauber)
+            // Kamera-Warmup
             const stream = await navigator.mediaDevices.getUserMedia({ video: true });
             stream.getTracks().forEach(t => t.stop());
 
-            // MindAR-System JETZT holen (nicht vorher cachen!)
             const mindar = sceneEl.systems["mindar-image-system"];
             if (!mindar || typeof mindar.start !== "function") {
-              throw new Error("MindAR-System nicht bereit (mindar-image-system fehlt).");
+              throw new Error("MindAR-System nicht bereit.");
             }
 
             await mindar.start();
             overlay.style.display = "none";
 
-            // iOS Audio freischalten per Click
+            // iOS Audio freischalten, ohne Playback zu erzwingen
             if (!audioUnlocked) {
+              video.muted = true;
+              await video.play().catch(() => {});
+              video.pause();
+
               video.muted = false;
-              video.play().catch(() => {});
               audioUnlocked = true;
+
+              // Falls Target bereits da ist → sofort weiterlaufen
+              if (hasTarget) {
+                video.play().catch(() => {});
+              }
             }
 
           } catch (e) {
-            const name = e && e.name ? e.name : "Error";
-            const msg  = e && e.message ? e.message : String(e);
-            alert("Start fehlgeschlagen: " + name + "\n" + msg);
+            alert("Start fehlgeschlagen:\n" + (e?.message || e));
             console.error(e);
           }
         });
 
-        // Video steuern
+        // ▶ Target erkannt → Video weiterlaufen
         target.addEventListener("targetFound", () => {
+          hasTarget = true;
           video.play().catch(() => {});
         });
+
+        // ⏸ Target weg → nur pausieren (KEIN Reset)
         target.addEventListener("targetLost", () => {
+          hasTarget = false;
           video.pause();
         });
       });
